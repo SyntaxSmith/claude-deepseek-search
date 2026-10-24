@@ -1,0 +1,9 @@
+/build/
+/dist/
+.env
+.env.*
+*.key
+config.local.*
+*.log
+.DS_Store
+__pycache__/

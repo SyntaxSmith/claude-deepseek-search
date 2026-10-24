@@ -26,23 +26,18 @@ jobs:
           - runner: ubuntu-22.04
             goos: linux
             goarch: amd64
-            shell: bash
           - runner: ubuntu-22.04-arm
             goos: linux
             goarch: arm64
-            shell: bash
           - runner: macos-15-intel
             goos: darwin
             goarch: amd64
-            shell: bash
           - runner: macos-15
             goos: darwin
             goarch: arm64
-            shell: bash
           - runner: windows-2022
             goos: windows
             goarch: amd64
-            shell: 'msys2 {0}'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     env:
@@ -60,8 +55,9 @@ jobs:
           msystem: UCRT64
           path-type: inherit
           install: make mingw-w64-ucrt-x86_64-gcc
-      - name: Test and package
-        shell: ${{ matrix.shell }}
+      - name: Test and package (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           set -euo pipefail
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
@@ -69,9 +65,17 @@ jobs:
             export CGO_CFLAGS="-mmacosx-version-min=12.0"
             export CGO_LDFLAGS="-mmacosx-version-min=12.0"
           fi
-          if [[ "$RUNNER_OS" == "Windows" ]]; then export CC=gcc; fi
           (cd go && go test -race ./... && go vet ./...)
           make package VERSION="$VERSION" GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
+      - name: Test and package (Windows)
+        if: runner.os == 'Windows'
+        shell: 'msys2 {0}'
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          export CC=gcc
+          (cd go && go test -race ./... && go vet ./...)
+          make package VERSION="$VERSION" GOOS=windows GOARCH=amd64
       - name: Load shared library and check ABI exports
         shell: bash
         run: |

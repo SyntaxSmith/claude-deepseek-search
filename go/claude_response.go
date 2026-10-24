@@ -110,8 +110,7 @@ func webSearchResultBlocks(hits []claudeWebSearchHit) []map[string]any {
 	return blocks
 }
 
-// Claude Code carries this field across replayed Messages turns. It is a
-// compatibility envelope for the non-Anthropic upstream, not ciphertext.
+// Claude Code replay context; Base64 JSON, not ciphertext.
 func encryptedSearchContext(hit claudeWebSearchHit) string {
 	raw, _ := json.Marshal(map[string]string{
 		"version": "1",

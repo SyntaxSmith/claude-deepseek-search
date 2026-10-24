@@ -88,6 +88,11 @@ type hostHTTPRequest struct {
 	Body           []byte              `json:"body,omitempty"`
 }
 
+type hostCallResult struct {
+	raw json.RawMessage
+	err error
+}
+
 func (c *deepSeekClient) search(query string, maxResults int, callbackID string) ([]claudeWebSearchHit, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -158,9 +163,6 @@ func (c *deepSeekClient) search(query string, maxResults int, callbackID string)
 }
 
 func (c *deepSeekClient) doHTTP(request hostHTTPRequest, callbackID string) (json.RawMessage, error) {
-	if c.TimeoutSeconds <= 0 {
-		return callHost(methodHostHTTPDo, request)
-	}
 	opened, errOpen := callHost(methodHostHTTPOperationOpen, map[string]string{"host_callback_id": callbackID})
 	if errOpen != nil {
 		return nil, newHTTPError(http.StatusNotImplemented, "CPA host HTTP cancellation is required; upgrade CPA to a v8 release")
@@ -172,23 +174,15 @@ func (c *deepSeekClient) doHTTP(request hostHTTPRequest, callbackID string) (jso
 		return nil, fmt.Errorf("DeepSeek HTTP operation returned no operation_id")
 	}
 	request.OperationID = operation.ID
-	result := make(chan struct {
-		raw json.RawMessage
-		err error
-	}, 1)
+	result := make(chan hostCallResult, 1)
 	go func() {
 		raw, err := callHost(methodHostHTTPDo, request)
-		result <- struct {
-			raw json.RawMessage
-			err error
-		}{raw, err}
+		result <- hostCallResult{raw, err}
 	}()
-	timer := time.NewTimer(time.Duration(c.TimeoutSeconds) * time.Second)
-	defer timer.Stop()
 	select {
 	case response := <-result:
 		return response.raw, response.err
-	case <-timer.C:
+	case <-time.After(time.Duration(c.TimeoutSeconds) * time.Second):
 		_, _ = callHost(methodHostHTTPCancel, map[string]string{
 			"host_callback_id": callbackID,
 			"operation_id":     operation.ID,

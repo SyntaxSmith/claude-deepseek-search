@@ -1,18 +1,14 @@
-# Merge into the existing CPA configuration; keep other plugins and plugins.dir.
 plugins:
   enabled: true
   dir: ~/.cli-proxy-api/plugins
   configs:
     claude-deepseek-search:
-      enabled: false # Set true after supplying a DeepSeek official API key.
+      enabled: false
       priority: 20
-      # Explicit allowlist; edit for the models that need this adapter.
       models:
         - "GLM-*"
-      # Optional examples: "Qwen*", "Kimi*". Do not opt in unnecessarily.
       exclude_models: []
       api_key_env: DEEPSEEK
-      # Alternatively set api_key only in the private host config.
       base_url: https://api.deepseek.com
       require_web_search_only: true
       count: 5

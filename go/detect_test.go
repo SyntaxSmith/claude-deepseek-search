@@ -42,6 +42,9 @@ func TestModelAllowlistRequiresExplicitTarget(t *testing.T) {
 	if modelAllowed("GLM-5.3", pluginConfig{Models: []string{"GLM-*"}, ExcludeModels: []string{"GLM-5.3"}}) {
 		t.Fatal("exclude_models must override models")
 	}
+	if modelAllowed(`foo\bar`, pluginConfig{Models: []string{"*"}, ExcludeModels: []string{`foo\bar`}}) {
+		t.Fatal("backslashes in patterns must remain literal")
+	}
 }
 
 func TestClaudeCodeWebSearchDetection(t *testing.T) {

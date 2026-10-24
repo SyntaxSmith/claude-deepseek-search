@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/match"
 )
 
 const (
@@ -12,8 +13,7 @@ const (
 	claudeWebSearchTypeCurrent = "web_search_20260318"
 )
 
-// These are never intercepted even when a user uses a broad allowlist such as "*".
-// The user can still keep the list narrow and avoid relying on these defaults.
+// Keep provider-native search models on their native path.
 var nativeSearchModelPatterns = []string{
 	"gpt*", "o1*", "o3*", "o4*", "o5*",
 	"claude*", "deepseek*",
@@ -60,17 +60,30 @@ func hasOnlyClaudeWebSearchTools(body []byte) bool {
 	return hasSearch
 }
 
-func looksLikeClaudeCodeWebSearchAssistant(body []byte) bool {
-	const prefix = "perform a web search for the query:"
+const webSearchPromptPrefix = "perform a web search for the query:"
+
+func latestUserText(body []byte) string {
 	messages := gjson.GetBytes(body, "messages").Array()
 	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Get("role").String() != "user" {
-			continue
+		if messages[i].Get("role").String() == "user" {
+			return strings.TrimSpace(extractClaudeMessageText(messages[i].Get("content")))
 		}
-		text := strings.ToLower(strings.TrimSpace(extractClaudeMessageText(messages[i].Get("content"))))
-		return strings.HasPrefix(text, prefix)
 	}
-	return false
+	return ""
+}
+
+func webSearchPromptQuery(text string) (string, bool) {
+	text = strings.TrimSpace(text)
+	lower := strings.ToLower(text)
+	if !strings.HasPrefix(lower, webSearchPromptPrefix) {
+		return "", false
+	}
+	return strings.TrimSpace(text[len(webSearchPromptPrefix):]), true
+}
+
+func looksLikeClaudeCodeWebSearchAssistant(body []byte) bool {
+	_, ok := webSearchPromptQuery(latestUserText(body))
+	return ok
 }
 
 func isClaudeCodeBuiltinWebSearchRequest(body []byte, requireOnly bool) bool {
@@ -80,8 +93,7 @@ func isClaudeCodeBuiltinWebSearchRequest(body []byte, requireOnly bool) bool {
 	if requireOnly && !hasOnlyClaudeWebSearchTools(body) {
 		return false
 	}
-	// The helper prompt is the positive Claude Code signal. An ordinary
-	// Messages request with only a web_search declaration must not match.
+	// Only intercept the Claude Code search helper.
 	return looksLikeClaudeCodeWebSearchAssistant(body)
 }
 
@@ -124,16 +136,13 @@ func unsupportedCallerPolicy(tool gjson.Result) bool {
 }
 
 func extractClaudeWebSearchQuery(body []byte) string {
-	const prefix = "perform a web search for the query:"
 	messages := gjson.GetBytes(body, "messages").Array()
 	for i := len(messages) - 1; i >= 0; i-- {
-		message := messages[i]
-		if message.Get("role").String() != "user" {
+		if messages[i].Get("role").String() != "user" {
 			continue
 		}
-		text := strings.TrimSpace(extractClaudeMessageText(message.Get("content")))
-		if len(text) >= len(prefix) && strings.EqualFold(text[:len(prefix)], prefix) {
-			return strings.TrimSpace(text[len(prefix):])
+		if query, ok := webSearchPromptQuery(extractClaudeMessageText(messages[i].Get("content"))); ok {
+			return query
 		}
 	}
 	for i := len(messages) - 1; i >= 0; i-- {
@@ -197,31 +206,11 @@ func matchesAnyIdentity(identities, patterns []string) bool {
 
 func matchesAnyPattern(value string, patterns []string) bool {
 	for _, pattern := range patterns {
-		if wildcardMatch(strings.ToLower(strings.TrimSpace(pattern)), value) {
+		pattern = strings.ToLower(strings.TrimSpace(pattern))
+		pattern = strings.ReplaceAll(pattern, `\`, `\\`)
+		if match.Match(value, pattern) {
 			return true
 		}
 	}
 	return false
-}
-
-func wildcardMatch(pattern, value string) bool {
-	p, v := []rune(pattern), []rune(value)
-	dp := make([][]bool, len(p)+1)
-	for i := range dp {
-		dp[i] = make([]bool, len(v)+1)
-	}
-	dp[0][0] = true
-	for i := 1; i <= len(p); i++ {
-		if p[i-1] == '*' {
-			dp[i][0] = dp[i-1][0]
-		}
-		for j := 1; j <= len(v); j++ {
-			if p[i-1] == '*' {
-				dp[i][j] = dp[i-1][j] || dp[i][j-1]
-				continue
-			}
-			dp[i][j] = dp[i-1][j-1] && (p[i-1] == '?' || p[i-1] == v[j-1])
-		}
-	}
-	return dp[len(p)][len(v)]
 }

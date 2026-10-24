@@ -55,6 +55,7 @@ import (
 const (
 	pluginID      = "claude-deepseek-search"
 	pluginVersion = "0.1.0"
+	defaultSchema = uint32(3)
 )
 
 const (
@@ -234,12 +235,11 @@ func configure(raw []byte) error {
 }
 
 func negotiateSchema(hostSchema uint32) uint32 {
-	const pluginSchema = uint32(6)
 	if hostSchema == 0 {
-		return 3
+		return defaultSchema
 	}
-	if hostSchema > pluginSchema {
-		return pluginSchema
+	if hostSchema > 6 {
+		return 6
 	}
 	return hostSchema
 }
@@ -263,9 +263,6 @@ func normalizeConfig(cfg *pluginConfig) {
 	cfg.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.deepseek.com"
-	}
-	if cfg.Count == 0 {
-		cfg.Count = 5
 	}
 	if cfg.Count < 1 || cfg.Count > 50 {
 		cfg.Count = 5
@@ -298,16 +295,12 @@ func loadedConfig() pluginConfig {
 	if cfg := activeConfig.Load(); cfg != nil {
 		return *cfg
 	}
-	return defaultConfig()
+	return pluginConfig{}
 }
 
 func pluginRegistration() map[string]any {
-	schema := activeSchema.Load()
-	if schema == 0 {
-		schema = 3
-	}
 	return map[string]any{
-		"schema_version": schema,
+		"schema_version": activeSchema.Load(),
 		"metadata": map[string]any{
 			"Name":             pluginID,
 			"Version":          pluginVersion,

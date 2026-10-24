@@ -91,6 +91,80 @@ func (b *claudeResponseBuilder) buildStream(query string, hits []claudeWebSearch
 	return []byte(strings.Join(chunks, ""))
 }
 
+func (b *claudeResponseBuilder) buildFetchMessage(page claudeWebFetchPage) []byte {
+	text := composeFetchText(page)
+	content := []map[string]any{
+		{"type": "server_tool_use", "id": b.toolID, "name": "web_fetch", "input": map[string]string{"url": page.URL}},
+		{"type": "web_fetch_tool_result", "tool_use_id": b.toolID, "content": webFetchResultContent(page)},
+		{"type": "text", "text": text},
+	}
+	payload := map[string]any{
+		"id": b.messageID, "type": "message", "role": "assistant", "model": b.model,
+		"content": content, "stop_reason": "end_turn", "stop_sequence": nil,
+		"usage": map[string]any{
+			"input_tokens": 1, "output_tokens": estimateTokens(text),
+			"server_tool_use": map[string]any{"web_fetch_requests": 1},
+		},
+	}
+	raw, _ := json.Marshal(payload)
+	return raw
+}
+
+func (b *claudeResponseBuilder) buildFetchStream(page claudeWebFetchPage) []byte {
+	text := composeFetchText(page)
+	var chunks []string
+	chunks = append(chunks, b.event("message_start", map[string]any{
+		"type": "message_start", "message": map[string]any{
+			"id": b.messageID, "type": "message", "role": "assistant", "content": []any{},
+			"model": b.model, "stop_reason": nil, "stop_sequence": nil,
+			"usage": map[string]any{"input_tokens": 1, "output_tokens": 0},
+		},
+	}))
+	chunks = append(chunks, b.blockStart(0, map[string]any{
+		"type": "server_tool_use", "id": b.toolID, "name": "web_fetch", "input": map[string]any{},
+	}))
+	input, _ := json.Marshal(map[string]string{"url": page.URL})
+	chunks = append(chunks, b.event("content_block_delta", map[string]any{
+		"type": "content_block_delta", "index": 0,
+		"delta": map[string]any{"type": "input_json_delta", "partial_json": string(input)},
+	}))
+	chunks = append(chunks, b.event("content_block_stop", map[string]any{"type": "content_block_stop", "index": 0}))
+	chunks = append(chunks, b.blockStart(1, map[string]any{
+		"type": "web_fetch_tool_result", "tool_use_id": b.toolID, "content": webFetchResultContent(page),
+	}))
+	chunks = append(chunks, b.event("content_block_stop", map[string]any{"type": "content_block_stop", "index": 1}))
+	chunks = append(chunks, b.blockStart(2, map[string]any{"type": "text", "text": ""}))
+	chunks = append(chunks, b.event("content_block_delta", map[string]any{
+		"type": "content_block_delta", "index": 2,
+		"delta": map[string]any{"type": "text_delta", "text": text},
+	}))
+	chunks = append(chunks, b.event("content_block_stop", map[string]any{"type": "content_block_stop", "index": 2}))
+	chunks = append(chunks, b.event("message_delta", map[string]any{
+		"type": "message_delta", "delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil},
+		"usage": map[string]any{"input_tokens": 1, "output_tokens": estimateTokens(text), "server_tool_use": map[string]any{"web_fetch_requests": 1}},
+	}))
+	chunks = append(chunks, b.event("message_stop", map[string]any{"type": "message_stop"}))
+	return []byte(strings.Join(chunks, ""))
+}
+
+func webFetchResultContent(page claudeWebFetchPage) map[string]any {
+	return map[string]any{
+		"type": "web_fetch_result", "url": page.URL,
+		"content": map[string]any{
+			"type": "document", "title": page.Title,
+			"source": map[string]any{"type": "text", "media_type": "text/plain", "data": page.Content},
+		},
+		"retrieved_at": time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+func composeFetchText(page claudeWebFetchPage) string {
+	if page.Title != "" {
+		return page.Title + "\n" + page.URL
+	}
+	return page.URL
+}
+
 func webSearchResultBlocks(hits []claudeWebSearchHit) []map[string]any {
 	blocks := make([]map[string]any, 0, len(hits))
 	for _, hit := range hits {

@@ -57,6 +57,27 @@ func TestClaudeCodeWebSearchDetection(t *testing.T) {
 	}
 }
 
+func TestDirectWebFetchDetection(t *testing.T) {
+	body := []byte(`{"tools":[{"type":"web_fetch_20250910","name":"web_fetch"}],"tool_choice":{"type":"tool","name":"web_fetch"},"messages":[{"role":"user","content":"Fetch https://example.com/docs and summarize it"}]}`)
+	if !isDirectWebFetchRequest(body, true) {
+		t.Fatal("expected direct API Fetch request")
+	}
+	if got := extractClaudeWebFetchURL(body); got != "https://example.com/docs" {
+		t.Fatalf("url = %q", got)
+	}
+}
+
+func TestDynamicWebFetchAndOptionsDoNotMatch(t *testing.T) {
+	body := []byte(`{"tools":[{"type":"web_fetch_20260209","name":"web_fetch"}],"tool_choice":{"type":"tool","name":"web_fetch"},"messages":[{"role":"user","content":"Fetch https://example.com/docs"}]}`)
+	if isDirectWebFetchRequest(body, true) {
+		t.Fatal("omitted dynamic caller policy must not match")
+	}
+	body = []byte(`{"tools":[{"type":"web_fetch_20250910","name":"web_fetch","citations":{"enabled":true}}],"tool_choice":{"type":"tool","name":"web_fetch"},"messages":[{"role":"user","content":"Fetch https://example.com/docs"}]}`)
+	if isDirectWebFetchRequest(body, true) {
+		t.Fatal("unsupported fetch options must not match")
+	}
+}
+
 func TestCurrentWebSearchVersionMatches(t *testing.T) {
 	body := []byte(`{"tools":[{"type":"web_search_20260318","name":"web_search","allowed_callers":["direct"]}],"messages":[{"role":"user","content":"Perform a web search for the query: current version"}]}`)
 	if !isClaudeCodeBuiltinWebSearchRequest(body, true) {

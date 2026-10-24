@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"time"
 )
@@ -55,6 +56,17 @@ type deepSeekSearchRequest struct {
 
 type deepSeekSearchResponse struct {
 	Results []deepSeekSearchResult `json:"results"`
+}
+
+type deepSeekFetchResponse struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+type claudeWebFetchPage struct {
+	Title   string
+	URL     string
+	Content string
 }
 
 type deepSeekSearchResult struct {
@@ -160,6 +172,48 @@ func (c *deepSeekClient) search(query string, maxResults int, callbackID string)
 		}
 	}
 	return hits, nil
+}
+
+func (c *deepSeekClient) fetch(rawURL, callbackID string) (claudeWebFetchPage, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	parsed, err := neturl.Parse(rawURL)
+	if err != nil || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return claudeWebFetchPage{}, newHTTPError(http.StatusBadRequest, "web fetch URL is invalid")
+	}
+	if len(rawURL) > 8192 {
+		return claudeWebFetchPage{}, newHTTPError(http.StatusBadRequest, "web fetch URL is too long")
+	}
+	payload, err := json.Marshal(map[string]string{"url": rawURL})
+	if err != nil {
+		return claudeWebFetchPage{}, fmt.Errorf("marshal DeepSeek fetch request: %w", err)
+	}
+	request := hostHTTPRequest{
+		HostCallbackID: callbackID,
+		Method:         http.MethodPost,
+		URL:            strings.TrimRight(c.BaseURL, "/") + "/v1/tools/fetch",
+		Headers: map[string][]string{
+			"Authorization": {"Bearer " + c.APIKey},
+			"Content-Type":  {"application/json"},
+			"Accept":        {"application/json"},
+		},
+		Body: payload,
+	}
+	raw, err := c.doHTTP(request, callbackID)
+	if err != nil {
+		return claudeWebFetchPage{}, redactDeepSeekError(err, c.APIKey)
+	}
+	var response hostHTTPResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return claudeWebFetchPage{}, fmt.Errorf("decode DeepSeek HTTP response: %w", err)
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return claudeWebFetchPage{}, newHTTPError(response.StatusCode, fmt.Sprintf("DeepSeek Fetch returned HTTP %d", response.StatusCode))
+	}
+	var page deepSeekFetchResponse
+	if err := json.Unmarshal(response.Body, &page); err != nil {
+		return claudeWebFetchPage{}, fmt.Errorf("decode DeepSeek Fetch response: %w", err)
+	}
+	return claudeWebFetchPage{Title: strings.TrimSpace(page.Title), URL: rawURL, Content: page.Content}, nil
 }
 
 func (c *deepSeekClient) doHTTP(request hostHTTPRequest, callbackID string) (json.RawMessage, error) {

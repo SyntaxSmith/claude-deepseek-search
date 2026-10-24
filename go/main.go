@@ -54,9 +54,10 @@ import (
 
 const (
 	pluginID      = "claude-deepseek-search"
-	pluginVersion = "0.1.0"
 	defaultSchema = uint32(3)
 )
+
+var pluginVersion = "0.2.0-dev"
 
 const (
 	methodPluginRegister        = "plugin.register"
@@ -339,8 +340,9 @@ func routeModel(raw []byte) ([]byte, error) {
 	if !modelAllowed(req.RequestedModel, cfg) {
 		return okEnvelope(modelRouteResponse{Handled: false, Reason: "model_not_in_allowlist"})
 	}
-	if !isClaudeCodeBuiltinWebSearchRequest(req.Body, cfg.RequireWebSearchOnly) {
-		return okEnvelope(modelRouteResponse{Handled: false, Reason: "not_a_claude_code_web_search_request"})
+	if !isClaudeCodeBuiltinWebSearchRequest(req.Body, cfg.RequireWebSearchOnly) &&
+		!isDirectWebFetchRequest(req.Body, cfg.RequireWebSearchOnly) {
+		return okEnvelope(modelRouteResponse{Handled: false, Reason: "not_a_claude_code_web_request"})
 	}
 	return okEnvelope(modelRouteResponse{
 		Handled:    true,
@@ -355,7 +357,7 @@ func execute(raw []byte) ([]byte, error) {
 	if err := json.Unmarshal(raw, &req); err != nil {
 		return nil, fmt.Errorf("decode executor request: %w", err)
 	}
-	body, errSearch := executeSearch(req)
+	body, errSearch := executeWebRequest(req)
 	if errSearch != nil {
 		return errorEnvelope("executor_error", errSearch.Error(), errHTTPStatus(errSearch)), nil
 	}
@@ -370,7 +372,7 @@ func executeStream(raw []byte) ([]byte, error) {
 	if strings.TrimSpace(req.StreamID) == "" {
 		return errorEnvelope("executor_error", "stream_id is required", 400), nil
 	}
-	payload, errSearch := executeSearch(req)
+	payload, errSearch := executeWebRequest(req)
 	if errSearch != nil {
 		return errorEnvelope("executor_error", errSearch.Error(), errHTTPStatus(errSearch)), nil
 	}

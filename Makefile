@@ -1,6 +1,6 @@
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
-VERSION ?= 0.2.0
+VERSION ?= 0.2.1
 BUILD_DIR := $(CURDIR)/build
 DIST_DIR := $(CURDIR)/dist
 PLUGIN_EXT := $(if $(filter darwin,$(GOOS)),dylib,$(if $(filter windows,$(GOOS)),dll,so))

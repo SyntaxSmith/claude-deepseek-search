@@ -18,9 +18,10 @@ const (
 )
 
 // Keep provider-native search models on their native path.
+// DeepSeek is intentionally absent: its chat API has no server-side search, so it must stay interceptable.
 var nativeSearchModelPatterns = []string{
 	"gpt*", "o1*", "o3*", "o4*", "o5*",
-	"claude*", "deepseek*",
+	"claude*",
 }
 
 func isClaudeSourceFormat(format string) bool {

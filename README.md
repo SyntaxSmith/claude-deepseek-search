@@ -12,7 +12,7 @@
 | Messages API `web_fetch_*` | 对显式指定 `web_fetch` 的单 URL 请求，调用 DeepSeek Fetch，返回 Markdown 文档 |
 | Claude Code 原生 `WebFetch` | **不替换**。它由客户端抓取网页，并非上述服务端 Fetch API |
 
-只处理 `models` 中的模型，例如 `GLM-*`；GPT、Claude、DeepSeek 模型保持原有路径。普通模型对话不受影响。Search 和 API Fetch 均支持 JSON、SSE 响应。
+只处理 `models` 中的模型，例如 `GLM-*`。GPT、Claude 模型固定保持原有路径，不受 `models` 影响；DeepSeek 模型按 `models` 正常接管，因为官方 chat API 没有服务端搜索。普通模型对话不受影响。Search 和 API Fetch 均支持 JSON、SSE 响应。
 
 推荐搜索一次返回 **5 条**，需要交叉核验时可设为 8–10 条。搜索返回摘要，抓取返回正文。
 

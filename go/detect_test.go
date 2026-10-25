@@ -23,12 +23,12 @@ func webSearchRequest(t *testing.T) []byte {
 
 func TestModelAllowlistPreservesNativeSearch(t *testing.T) {
 	cfg := pluginConfig{Models: []string{"*"}}
-	for _, model := range []string{"GLM-5.3", "Qwen3[1m]"} {
+	for _, model := range []string{"GLM-5.3", "Qwen3[1m]", "deepseek-flash[1m]", "vendor/deepseek-test"} {
 		if !modelAllowed(model, cfg) {
 			t.Fatalf("modelAllowed(%q) = false, want true", model)
 		}
 	}
-	for _, model := range []string{"gpt-6.1-sol", "claude-opus-5-5", "deepseek-flash[1m]", "openai/gpt-test", "vendor/deepseek-test"} {
+	for _, model := range []string{"gpt-6.1-sol", "claude-opus-5-5", "openai/gpt-test"} {
 		if modelAllowed(model, cfg) {
 			t.Fatalf("modelAllowed(%q) = true, want native model excluded", model)
 		}
